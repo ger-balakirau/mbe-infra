@@ -9,10 +9,12 @@
  * the specific language governing rights and limitations under the License.
  ********************************************************************************/
 
-function crm_env($name, $default = '')
-{
-  $value = getenv($name);
-  return ($value === false || $value === '') ? $default : $value;
+if (!function_exists('crm_env')) {
+  function crm_env($name, $default = '')
+  {
+    $value = getenv($name);
+    return ($value === false || $value === '') ? $default : $value;
+  }
 }
 
 // Adjust error_reporting favourable to deployment.

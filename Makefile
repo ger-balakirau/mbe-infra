@@ -56,7 +56,13 @@ ps:
 	$(COMPOSE) ps
 
 logs:
-	$(COMPOSE) logs -f $(SERVICE)
+	@set -o pipefail; \
+	status=0; \
+	$(COMPOSE) logs -f $(SERVICE) || status=$$?; \
+	if [[ $$status -eq 0 || $$status -eq 130 ]]; then \
+		exit 0; \
+	fi; \
+	exit $$status
 
 sh-apache:
 	$(COMPOSE) exec $(APACHE_SERVICE) bash
@@ -69,10 +75,10 @@ compose-exec:
 	$(COMPOSE) exec $(SERVICE) sh -lc "$(CMD)"
 
 tracking:
-	$(COMPOSE) exec $(APACHE_SERVICE) php Tracking.php
+	$(COMPOSE) exec -T $(APACHE_SERVICE) php Tracking.php
 
 vtiger-cron:
-	$(COMPOSE) exec $(APACHE_SERVICE) php vtigercron.php
+	$(COMPOSE) exec -T $(APACHE_SERVICE) php vtigercron.php
 
 db-dump:
 	@mkdir -p "$(DUMP_DIR)"
