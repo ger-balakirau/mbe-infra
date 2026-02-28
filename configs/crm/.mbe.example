@@ -1,0 +1,2 @@
+# htpasswd format example:
+# admin:$apr1$example$xxxxxxxxxxxxxxxxxxxxxx

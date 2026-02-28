@@ -15,6 +15,16 @@ docker compose ps
 - CRM: `http://localhost:8081`
 - MySQL: `127.0.0.1:33063`
 
+## Конфиги CRM в инфре
+
+- Внешние runtime-конфиги хранятся в `configs/crm/` и монтируются в контейнер поверх кода CRM:
+  - `config.inc.php`
+  - `config.csrf-secret.php`
+  - `config_override.php`
+  - `.mbe` (по умолчанию используется `configs/crm/.mbe.example`)
+- Эти файлы не находятся в git-репозитории кода приложения (`html/mbelab.com/crm`), только в инфра-репо.
+- Для переноса на другую машину достаточно перенести infra-репо + код CRM и заполнить `.env`.
+
 ## Важно
 
 - Только для dev/legacy-совместимости.

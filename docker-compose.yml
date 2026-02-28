@@ -36,10 +36,16 @@ services:
     image: ${APP_IMAGE_NAME:-mbe:dev}
     pull_policy: never
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       TZ: Europe/Moscow
     volumes:
       - ${APP_CODE_PATH:-./html/mbelab.com}:/var/www/html/mbelab.com
+      - ${CRM_CONFIG_PATH:-./configs/crm}/config.inc.php:/var/www/html/mbelab.com/crm/config.inc.php:ro
+      - ${CRM_CONFIG_PATH:-./configs/crm}/config.csrf-secret.php:/var/www/html/mbelab.com/crm/config.csrf-secret.php:ro
+      - ${CRM_CONFIG_PATH:-./configs/crm}/config_override.php:/var/www/html/mbelab.com/crm/config_override.php:ro
+      - ${CRM_CONFIG_PATH:-./configs/crm}/.mbe.example:/var/www/html/mbelab.com/crm/.mbe:ro
       - ./prod.conf/apache2/sites-available/000-default.conf:/etc/apache2/sites-available/000-default.conf:ro
       - ./prod.conf/apache2/conf.d/99-php.ini:/usr/local/etc/php/conf.d/99-php.ini:ro
       - ./prod.conf/apache2/conf.d/99-opcache.ini:/usr/local/etc/php/conf.d/99-opcache.ini:ro
