@@ -36,8 +36,31 @@ mbe exec -T mysql \
   | gzip > "${MYSQL_DATABASE}_$(date +%F_%H-%M).sql.gz"
 ```
 
+С прогрессом дампа (нужна утилита `pv`):
+
 ```bash
+# Ubuntu/Debian: sudo apt-get install -y pv
+# macOS (brew):  brew install pv
+mbe exec -T mysql \
+  mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
+  | pv \
+  | gzip > "${MYSQL_DATABASE}_$(date +%F_%H-%M).sql.gz"
+```
+
+```bash
+# Замените dump.sql.gz на имя вашего файла, например:
+# crm_backup_2026-02-28_12-00.sql.gz
 gunzip -c dump.sql.gz \
+  | mbe exec -T mysql \
+    mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
+```
+
+Импорт с прогрессом (нужна `pv`):
+
+```bash
+# Замените dump.sql.gz на свой файл дампа
+pv dump.sql.gz \
+  | gunzip \
   | mbe exec -T mysql \
     mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
 ```
