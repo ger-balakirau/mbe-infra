@@ -8,14 +8,16 @@ DUMP_DIR ?= dump
 SERVICE ?= $(APACHE_SERVICE)
 
 .PHONY: help \
-	up down restart ps logs sh-apache compose-exec \
+	up up-build rebuild down restart ps logs sh-apache compose-exec \
 	tracking vtiger-cron \
-	db-dump db-dump-pv db-import db-import-pv \
+	db-dump db-dump-pv db-import db-import-pv mysql-show-mode mysql-legacy-mode \
 	deploy deploy-dry deploy-full-perms
 
 help:
 	@echo "Main (docker compose via make):"
-	@echo "  make up             # docker compose up -d --build"
+	@echo "  make up             # docker compose up -d"
+	@echo "  make up-build       # docker compose up -d --build"
+	@echo "  make rebuild        # docker compose build --no-cache"
 	@echo "  make down           # docker compose down"
 	@echo "  make restart        # docker compose restart"
 	@echo "  make ps             # docker compose ps"
@@ -33,6 +35,8 @@ help:
 	@echo "  make db-dump-pv     # same as db-dump, with pv progress"
 	@echo "  make db-import FILE=$(DUMP_DIR)/backup.sql.gz"
 	@echo "  make db-import-pv FILE=$(DUMP_DIR)/backup.sql.gz"
+	@echo "  make mysql-show-mode   # show current MySQL GLOBAL sql_mode"
+	@echo "  make mysql-legacy-mode # dev only: drop ONLY_FULL_GROUP_BY at runtime"
 	@echo ""
 	@echo "Deploy:"
 	@echo "  make deploy"
@@ -44,7 +48,13 @@ help:
 	@echo "  ARGS='...'         Extra args for scripts/deploy/push-crm.sh"
 
 up:
+	$(COMPOSE) up -d
+
+up-build:
 	$(COMPOSE) up -d --build
+
+rebuild:
+	$(COMPOSE) build --no-cache
 
 down:
 	$(COMPOSE) down
@@ -142,6 +152,14 @@ db-import-pv:
 		| gunzip \
 		| $(COMPOSE) exec -T $(MYSQL_SERVICE) sh -lc 'mysql -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE"'
 	@echo "Import completed"
+
+mysql-show-mode:
+	@$(COMPOSE) exec -T $(MYSQL_SERVICE) sh -lc "mysql -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -Nse \"SELECT @@GLOBAL.sql_mode;\" \"$$MYSQL_DATABASE\""
+
+mysql-legacy-mode:
+	@echo "Applying dev-only sql_mode workaround (remove ONLY_FULL_GROUP_BY)..."
+	@$(COMPOSE) exec -T $(MYSQL_SERVICE) sh -lc "mysql -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -Nse \"SET GLOBAL sql_mode=(SELECT REPLACE(@@GLOBAL.sql_mode, 'ONLY_FULL_GROUP_BY', '')); SELECT @@GLOBAL.sql_mode;\" \"$$MYSQL_DATABASE\""
+	@echo "Applied. Note: this is runtime-only and resets after mysql container restart."
 
 deploy:
 	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) $(ARGS)

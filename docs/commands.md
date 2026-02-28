@@ -1,60 +1,47 @@
 # MBE Commands
 
-Основной интерфейс для локальной работы: `make` (без установки shell-алиасов).
+Основной интерфейс для локальной работы: `make`.
 
-## Базовые команды
-
-```bash
-make up
-make ps
-make logs
-make logs SERVICE=mysql
-make sh-apache
-make compose-exec CMD='php -v'
-```
-
-## CRM задачи
-
-`Tracking.php`:
-- ручной запуск логистического трекинга отправлений (обновление статусов по интеграциям/операторам).
-
-`vtigercron.php`:
-- запуск штатных cron-задач CRM (плановые фоновые процессы, очереди, сервисные обработчики).
+Быстрая справка по всем командам:
 
 ```bash
-make tracking
-make vtiger-cron
+make help
 ```
 
-## Работа с базой
+## Lifecycle (Docker Compose)
 
-Создать дамп:
+| Команда | Что делает | Когда использовать |
+|---|---|---|
+| `make up` | `docker compose up -d` | Обычный старт/поднятие без пересборки |
+| `make up-build` | `docker compose up -d --build` | Первый запуск или после изменений в `Dockerfile`/build context |
+| `make rebuild` | `docker compose build --no-cache` | Полная пересборка образов без cache |
+| `make down` | `docker compose down` | Остановить и удалить контейнеры/сеть проекта |
+| `make restart` | `docker compose restart` | Быстрый рестарт сервисов |
+| `make ps` | `docker compose ps` | Проверить состояние контейнеров |
+| `make logs` | `docker compose logs -f apache` | Смотреть live-логи `apache` по умолчанию |
+| `make logs SERVICE=mysql` | `docker compose logs -f mysql` | Смотреть логи конкретного сервиса |
+| `make sh-apache` | `docker compose exec apache bash` | Зайти в shell `apache` контейнера |
+| `make compose-exec CMD='php -v'` | Выполнить команду внутри сервиса | Универсальный запуск команд внутри контейнера |
 
-```bash
-make db-dump
-```
+## CRM Tasks
 
-Создать дамп с прогрессом (нужна утилита `pv`):
+| Команда | Что делает |
+|---|---|
+| `make tracking` | Запуск `Tracking.php` в `apache` контейнере (ручной трекинг отправлений) |
+| `make vtiger-cron` | Запуск `vtigercron.php` в `apache` контейнере (штатные cron-задачи CRM) |
 
-```bash
-# Ubuntu/Debian: sudo apt-get install -y pv
-# macOS (brew):  brew install pv
-make db-dump-pv
-```
+## Database
 
-Импорт из файла:
+| Команда | Что делает | Требования |
+|---|---|---|
+| `make db-dump` | Дамп БД в `dump/<db>_<date>.sql.gz` | `docker compose` |
+| `make db-dump-pv` | То же, но с прогрессом | Утилита `pv` |
+| `make db-import FILE=dump/file.sql.gz` | Импорт дампа в БД | `FILE` обязателен |
+| `make db-import-pv FILE=dump/file.sql.gz` | Импорт с прогрессом | `FILE` + `pv` |
+| `make mysql-show-mode` | Показать текущий `@@GLOBAL.sql_mode` | Для диагностики SQL-режима |
+| `make mysql-legacy-mode` | Dev-only: убрать `ONLY_FULL_GROUP_BY` runtime-командой | Сбрасывается после рестарта mysql |
 
-```bash
-make db-import FILE=dump/crm_backup_2026-02-28_12-00.sql.gz
-```
-
-Импорт с прогрессом (нужна `pv`):
-
-```bash
-make db-import-pv FILE=dump/crm_backup_2026-02-28_12-00.sql.gz
-```
-
-## Deploy на сервер
+## Deploy
 
 Подготовка:
 
@@ -62,40 +49,38 @@ make db-import-pv FILE=dump/crm_backup_2026-02-28_12-00.sql.gz
 cp .env.deploy.example .env.deploy
 ```
 
-Проверить изменения (без применения):
+Основные команды:
 
-```bash
-make deploy-dry
-```
+|  Команда| Что делает |
+|---|---|
+| `make deploy` | Реальный деплой CRM на сервер |
+| `make deploy-dry` | Проверка деплоя без изменений |
+| `make deploy-full-perms` | Деплой + полный медленный `chmod/chown` прогон |
 
-Реальный деплой:
-
-```bash
-make deploy
-```
-
-`config.inc.php` по умолчанию в deploy не входит. Включить можно так:
-
-```bash
-ARGS="--with-config-inc" make deploy
-# или установить в .env.deploy:
-# DEPLOY_INCLUDE_CONFIG_INC=1
-```
-
-Полный прогон прав по всему проекту (редко, медленно):
-
-```bash
-make deploy-full-perms
-```
-
-При необходимости можно временно переопределить хост:
+Полезные варианты:
 
 ```bash
 make deploy HOST=203.0.113.10
+ARGS="--with-config-inc" make deploy
 ```
 
-Опасные флаги `push-crm.sh`:
+Опасные флаги `scripts/deploy/push-crm.sh`:
+
 - `--delete` — удаляет на сервере файлы, которых нет локально.
-- `--full-perms` — запускает полный рекурсивный прогон прав по проекту (медленно).
+- `--full-perms` — полный рекурсивный прогон прав (медленно).
 - `--source <path>` — при ошибке пути можно отправить на сервер не тот каталог.
 - `--with-config-inc` — включает синхронизацию `config.inc.php` (по умолчанию выключена).
+
+## Variables
+
+| Переменная | Где используется | Значение по умолчанию |
+|---|---|---|
+| `SERVICE` | `logs`, `compose-exec` | `apache` |
+| `CMD` | `compose-exec` | обязателен |
+| `FILE` | `db-import`, `db-import-pv` | обязателен |
+| `HOST` | `deploy*` | из `.env.deploy` или параметров скрипта |
+| `ARGS` | `deploy*` | пусто |
+| `COMPOSE` | все compose-команды | `docker compose` |
+| `APACHE_SERVICE` | `sh-apache`, `tracking`, `vtiger-cron` | `apache` |
+| `MYSQL_SERVICE` | db/mysql команды | `mysql` |
+| `DUMP_DIR` | `db-dump*`, `db-import*` | `dump` |

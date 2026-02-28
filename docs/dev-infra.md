@@ -18,7 +18,7 @@ cp env.example .env
 Проверьте, что путь в `.env` (`APP_CODE_PATH`) указывает на каталог, где есть `crm`.
 
 ```bash
-make up
+make up-build
 make ps
 make logs
 ```
