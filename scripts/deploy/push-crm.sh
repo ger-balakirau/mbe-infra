@@ -19,6 +19,16 @@ APPLY_PERMS="1"
 RELOAD_OPCACHE="1"
 FULL_PERMS="0"
 INCLUDE_CONFIG_INC="0"
+ENV_FILE_EXPLICIT="0"
+
+require_option_value() {
+  local opt="$1"
+  local value="${2:-}"
+  if [[ -z "${value}" ]]; then
+    echo "Error: ${opt} requires a value" >&2
+    exit 1
+  fi
+}
 
 apply_env_defaults() {
   REMOTE_HOST="${DEPLOY_REMOTE_HOST:-${REMOTE_HOST}}"
@@ -50,19 +60,19 @@ load_env_file() {
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/deploy/push-crm.sh --host <host> [options]
+  bash scripts/deploy/push-crm.sh [--host <host>] [options]
 
 Options:
-  --host <host>        Remote host or IP (required)
+  --host <host>        Remote host or IP (or DEPLOY_REMOTE_HOST from env file)
   --user <user>        SSH user (default: root)
   --port <port>        SSH port (default: 22)
   --path <path>        Remote CRM path (default: /var/www/html/mbelab.com/crm)
   --source <path>      Local CRM source path
-  --env-file <path>    Path to deploy env file (default: .env.deploy in infra root)
+  --env-file <path>    Path to deploy env file (default: .env.deploy if exists)
   --key <path>         SSH private key
   --owner <owner>      Ownership user on remote (default: www-data)
   --group <group>      Ownership group on remote (default: www-data)
-  --dry-run            Show changes without writing
+  --dry-run            Show changes without writing (requires existing remote dirs)
   --delete             Delete remote files that are missing locally
   --no-perms           Skip remote chmod/chown step
   --full-perms         Force full chmod/chown scan over project (slow)
@@ -71,35 +81,64 @@ Options:
   -h, --help           Show this help
 
 Notes:
+  - Legacy deploy target: Debian Stretch + PHP 7.x + Apache 2.
   - Content of storage/ and OperatorWayBill/ is not synchronized.
   - config.inc.php is NOT synchronized by default.
   - Directories storage/ and OperatorWayBill/ are created on remote if missing.
   - If env file exists, variables DEPLOY_* are used as defaults.
+  - CLI options always override env defaults, regardless of argument order.
   - By default, ownership/perms are applied only to changed files via rsync.
 EOF
 }
 
-if [[ -f "${ENV_FILE}" ]]; then
-  load_env_file "${ENV_FILE}"
-fi
+ARGS=("$@")
+scan_idx=0
+while [[ ${scan_idx} -lt ${#ARGS[@]} ]]; do
+  case "${ARGS[$scan_idx]}" in
+    --host|--user|--port|--path|--source|--key|--owner|--group)
+      next_idx=$((scan_idx + 1))
+      require_option_value "${ARGS[$scan_idx]}" "${ARGS[$next_idx]:-}"
+      scan_idx=$((scan_idx + 2))
+      ;;
+    --env-file)
+      next_idx=$((scan_idx + 1))
+      require_option_value "--env-file" "${ARGS[$next_idx]:-}"
+      ENV_FILE="${ARGS[$next_idx]}"
+      ENV_FILE_EXPLICIT="1"
+      scan_idx=$((scan_idx + 2))
+      ;;
+    --dry-run|--delete|--no-perms|--full-perms|--with-config-inc|--no-opcache-reload|-h|--help)
+      scan_idx=$((scan_idx + 1))
+      ;;
+    *)
+      scan_idx=$((scan_idx + 1))
+      ;;
+  esac
+done
 
-apply_env_defaults
+if [[ "${ENV_FILE_EXPLICIT}" == "1" ]]; then
+  load_env_file "${ENV_FILE}"
+elif [[ -f "${ENV_FILE}" ]]; then
+  load_env_file "${ENV_FILE}"
+else
+  apply_env_defaults
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --host) REMOTE_HOST="${2:-}"; shift 2 ;;
-    --user) REMOTE_USER="${2:-}"; shift 2 ;;
-    --port) REMOTE_PORT="${2:-}"; shift 2 ;;
-    --path) REMOTE_PATH="${2:-}"; shift 2 ;;
-    --source) SOURCE_DIR="${2:-}"; shift 2 ;;
+    --host) require_option_value "$1" "${2:-}"; REMOTE_HOST="${2:-}"; shift 2 ;;
+    --user) require_option_value "$1" "${2:-}"; REMOTE_USER="${2:-}"; shift 2 ;;
+    --port) require_option_value "$1" "${2:-}"; REMOTE_PORT="${2:-}"; shift 2 ;;
+    --path) require_option_value "$1" "${2:-}"; REMOTE_PATH="${2:-}"; shift 2 ;;
+    --source) require_option_value "$1" "${2:-}"; SOURCE_DIR="${2:-}"; shift 2 ;;
     --env-file)
+      require_option_value "$1" "${2:-}"
       ENV_FILE="${2:-}"
       shift 2
-      load_env_file "${ENV_FILE}"
       ;;
-    --key) SSH_KEY="${2:-}"; shift 2 ;;
-    --owner) OWNER="${2:-}"; shift 2 ;;
-    --group) GROUP="${2:-}"; shift 2 ;;
+    --key) require_option_value "$1" "${2:-}"; SSH_KEY="${2:-}"; shift 2 ;;
+    --owner) require_option_value "$1" "${2:-}"; OWNER="${2:-}"; shift 2 ;;
+    --group) require_option_value "$1" "${2:-}"; GROUP="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --delete) DELETE_MODE="1"; shift ;;
     --no-perms) APPLY_PERMS="0"; shift ;;
@@ -112,7 +151,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${REMOTE_HOST}" ]]; then
-  echo "Error: --host is required" >&2
+  echo "Error: remote host is empty (set --host or DEPLOY_REMOTE_HOST)" >&2
   usage
   exit 1
 fi
@@ -147,7 +186,7 @@ fi
 if [[ "${APPLY_PERMS}" == "1" ]]; then
   RSYNC_OPTS+=(
     "--chown=${OWNER}:${GROUP}"
-    --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
+    "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"
   )
 fi
 
@@ -160,12 +199,17 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   echo "Dry run mode enabled"
 fi
 
-if [[ "${DRY_RUN}" != "1" ]]; then
+if [[ "${DRY_RUN}" == "1" ]]; then
+  echo "Checking remote directories on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+  if ! ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+    "test -d '${REMOTE_PATH}' && test -d '${REMOTE_PATH}/storage' && test -d '${REMOTE_PATH}/OperatorWayBill'"; then
+    echo "Error: missing remote directories for dry-run. Run deploy once without --dry-run to create them." >&2
+    exit 1
+  fi
+else
   echo "Preparing remote directories on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
     "mkdir -p '${REMOTE_PATH}' '${REMOTE_PATH}/storage' '${REMOTE_PATH}/OperatorWayBill'"
-else
-  echo "Dry run: remote directory creation skipped"
 fi
 
 echo "Syncing ${SOURCE_DIR} -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
@@ -201,7 +245,7 @@ EOF
 fi
 
 if [[ "${RELOAD_OPCACHE}" == "1" && "${DRY_RUN}" != "1" ]]; then
-  echo "Reloading PHP/Apache services to refresh OPCache"
+  echo "Reloading legacy PHP 7/Apache services to refresh OPCache"
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "bash -s" <<'EOF'
 set -euo pipefail
 reloaded=0
@@ -223,7 +267,7 @@ reload_service() {
   return 1
 }
 
-for svc in php7.0-fpm php7.1-fpm php7.2-fpm php7.3-fpm php7.4-fpm php8.0-fpm php8.1-fpm php8.2-fpm php8.3-fpm apache2; do
+for svc in php7.0-fpm php7.1-fpm php7.2-fpm php7.3-fpm php7.4-fpm php-fpm apache2 httpd; do
   if reload_service "${svc}"; then
     echo "Reloaded ${svc}"
     reloaded=1
@@ -231,7 +275,7 @@ for svc in php7.0-fpm php7.1-fpm php7.2-fpm php7.3-fpm php7.4-fpm php8.0-fpm php
 done
 
 if [[ "${reloaded}" != "1" ]]; then
-  echo "Warning: no known php-fpm/apache service found to reload" >&2
+  echo "Warning: no known PHP 7/Apache service found to reload" >&2
 fi
 EOF
 fi
