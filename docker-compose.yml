@@ -12,7 +12,7 @@ services:
     environment:
       TZ: Europe/Moscow
     volumes:
-      - mbe-db:/var/lib/mysql
+      - db:/var/lib/mysql
       - ./prod.conf/etc/mysql/99-custom.cnf:/etc/mysql/conf.d/99-custom.cnf:ro
     healthcheck:
       test:
@@ -57,4 +57,4 @@ networks:
     driver: bridge # обычная внутренняя сеть; создастся автоматически
 
 volumes:
-  mbe-db: {} # стандартный Docker volume для /var/lib/mysql
+  db: {} # стандартный Docker volume для /var/lib/mysql

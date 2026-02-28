@@ -14,11 +14,15 @@ ARG PGID=1000
 
 # Репозитории Stretch (EOL) + пакеты
 RUN set -eux; \
-  echo 'deb http://archive.debian.org/debian stretch main contrib non-free' > /etc/apt/sources.list; \
-  printf 'Acquire::Check-Valid-Until "false";\n' \
+  printf '%s\n' \
+  'deb http://archive.debian.org/debian stretch main contrib non-free' \
+  'deb http://archive.debian.org/debian-security stretch/updates main contrib non-free' \
+  > /etc/apt/sources.list; \
+  rm -f /etc/apt/sources.list.d/*.list; \
+  printf 'Acquire::Check-Valid-Until "false";\nAcquire::AllowInsecureRepositories "true";\nAPT::Get::AllowUnauthenticated "true";\n' \
   > /etc/apt/apt.conf.d/99archive; \
   apt-get update; \
-  apt-get install -y --no-install-recommends \
+  apt-get install -y --allow-unauthenticated --no-install-recommends \
   libc-client2007e-dev libkrb5-dev libssl-dev \
   libcurl4-openssl-dev libmcrypt-dev libedit-dev libgettextpo-dev \
   libjpeg62-turbo-dev libpng-dev libfreetype6-dev libxslt1-dev \
