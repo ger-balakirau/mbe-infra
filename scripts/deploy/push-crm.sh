@@ -18,6 +18,7 @@ DELETE_MODE="0"
 APPLY_PERMS="1"
 RELOAD_OPCACHE="1"
 FULL_PERMS="0"
+INCLUDE_CONFIG_INC="0"
 
 apply_env_defaults() {
   REMOTE_HOST="${DEPLOY_REMOTE_HOST:-${REMOTE_HOST}}"
@@ -30,6 +31,7 @@ apply_env_defaults() {
   SOURCE_DIR="${DEPLOY_SOURCE_DIR:-${SOURCE_DIR}}"
   RELOAD_OPCACHE="${DEPLOY_RELOAD_OPCACHE:-${RELOAD_OPCACHE}}"
   FULL_PERMS="${DEPLOY_FULL_PERMS:-${FULL_PERMS}}"
+  INCLUDE_CONFIG_INC="${DEPLOY_INCLUDE_CONFIG_INC:-${INCLUDE_CONFIG_INC}}"
 }
 
 load_env_file() {
@@ -64,11 +66,13 @@ Options:
   --delete             Delete remote files that are missing locally
   --no-perms           Skip remote chmod/chown step
   --full-perms         Force full chmod/chown scan over project (slow)
+  --with-config-inc    Include config.inc.php in sync (disabled by default)
   --no-opcache-reload  Skip OPCache/app service reload after deploy
   -h, --help           Show this help
 
 Notes:
   - Content of storage/ and OperatorWayBill/ is not synchronized.
+  - config.inc.php is NOT synchronized by default.
   - Directories storage/ and OperatorWayBill/ are created on remote if missing.
   - If env file exists, variables DEPLOY_* are used as defaults.
   - By default, ownership/perms are applied only to changed files via rsync.
@@ -100,6 +104,7 @@ while [[ $# -gt 0 ]]; do
     --delete) DELETE_MODE="1"; shift ;;
     --no-perms) APPLY_PERMS="0"; shift ;;
     --full-perms) FULL_PERMS="1"; shift ;;
+    --with-config-inc) INCLUDE_CONFIG_INC="1"; shift ;;
     --no-opcache-reload) RELOAD_OPCACHE="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -134,6 +139,10 @@ RSYNC_OPTS=(
   --exclude='/storage/**'
   --exclude='/OperatorWayBill/**'
 )
+
+if [[ "${INCLUDE_CONFIG_INC}" != "1" ]]; then
+  RSYNC_OPTS+=(--exclude='/config.inc.php')
+fi
 
 if [[ "${APPLY_PERMS}" == "1" ]]; then
   RSYNC_OPTS+=(
