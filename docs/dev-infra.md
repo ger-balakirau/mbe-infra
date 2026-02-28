@@ -18,20 +18,19 @@ cp env.example .env
 Проверьте, что путь в `.env` (`APP_CODE_PATH`) указывает на каталог, где есть `crm`.
 
 ```bash
-docker compose up -d --build
-docker compose ps
-docker compose logs -f apache
+make up
+make ps
+make logs
 ```
 
 CRM: `http://localhost:8081`
 
 MySQL: `127.0.0.1:33063`
 
-## Shell-интеграция
+## Управление через Makefile
 
 ```bash
-bash scripts/install-shell-tools.sh
-source ~/.bashrc
+make help
 ```
 
-После этого можно запускать `mbe ...` из любой подпапки проекта.
+`make` — основной интерфейс для локальной работы (compose, CRM-команды, backup/restore, deploy).

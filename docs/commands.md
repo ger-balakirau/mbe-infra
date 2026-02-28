@@ -1,21 +1,19 @@
 # MBE Commands
 
-## Один раз: установить shell-команды
-
-```bash
-bash scripts/install-shell-tools.sh
-source ~/.bashrc
-# для zsh:
-# bash scripts/install-shell-tools.sh ~/.zshrc && source ~/.zshrc
-```
-
-После установки доступны команды:
-
-- `mbe ...` — запуск `docker compose` для текущего MBE-проекта из любой подпапки
-- `mbe-env` — загрузка переменных из `.env`
-- `mbe-root` — показать найденный корень проекта
+Основной интерфейс для локальной работы: `make` (без установки shell-алиасов).
 
 ## Базовые команды
+
+```bash
+make up
+make ps
+make logs
+make logs SERVICE=mysql
+make sh-apache
+make compose-exec CMD='php -v'
+```
+
+## CRM задачи
 
 `Tracking.php`:
 - ручной запуск логистического трекинга отправлений (обновление статусов по интеграциям/операторам).
@@ -24,57 +22,36 @@ source ~/.bashrc
 - запуск штатных cron-задач CRM (плановые фоновые процессы, очереди, сервисные обработчики).
 
 ```bash
-mbe ps
-mbe logs -f apache
-mbe exec apache php Tracking.php
-mbe exec apache php vtigercron.php
+make tracking
+make vtiger-cron
 ```
 
 ## Работа с базой
 
-```bash
-mbe-env
-```
+Создать дамп:
 
 ```bash
-FILE="dump/${MYSQL_DATABASE}_$(date +%F_%H-%M).sql.gz"
-mbe exec -T mysql \
-  mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
-  | gzip > "$FILE"
-echo "Saved: $FILE"
+make db-dump
 ```
 
-С прогрессом дампа (нужна утилита `pv`):
+Создать дамп с прогрессом (нужна утилита `pv`):
 
 ```bash
 # Ubuntu/Debian: sudo apt-get install -y pv
 # macOS (brew):  brew install pv
-FILE="dump/${MYSQL_DATABASE}_$(date +%F_%H-%M).sql.gz"
-mbe exec -T mysql \
-  mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" \
-  | pv \
-  | gzip > "$FILE"
-echo "Saved: $FILE"
+make db-dump-pv
 ```
 
+Импорт из файла:
+
 ```bash
-# Импорт из файла в папке dump/
-# Замените имя на свой файл:
-FILE="dump/crm_backup_2026-02-28_12-00.sql.gz"
-gunzip -c "$FILE" \
-  | mbe exec -T mysql \
-    mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
+make db-import FILE=dump/crm_backup_2026-02-28_12-00.sql.gz
 ```
 
 Импорт с прогрессом (нужна `pv`):
 
 ```bash
-# Замените имя на свой файл в папке dump/
-FILE="dump/crm_backup_2026-02-28_12-00.sql.gz"
-pv "$FILE" \
-  | gunzip \
-  | mbe exec -T mysql \
-    mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
+make db-import-pv FILE=dump/crm_backup_2026-02-28_12-00.sql.gz
 ```
 
 ## Deploy на сервер
