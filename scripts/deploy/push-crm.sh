@@ -16,6 +16,34 @@ GROUP="www-data"
 DRY_RUN="0"
 DELETE_MODE="0"
 APPLY_PERMS="1"
+RELOAD_OPCACHE="1"
+FULL_PERMS="0"
+
+apply_env_defaults() {
+  REMOTE_HOST="${DEPLOY_REMOTE_HOST:-${REMOTE_HOST}}"
+  REMOTE_USER="${DEPLOY_REMOTE_USER:-${REMOTE_USER}}"
+  REMOTE_PORT="${DEPLOY_REMOTE_PORT:-${REMOTE_PORT}}"
+  REMOTE_PATH="${DEPLOY_REMOTE_PATH:-${REMOTE_PATH}}"
+  SSH_KEY="${DEPLOY_SSH_KEY:-${SSH_KEY}}"
+  OWNER="${DEPLOY_OWNER:-${OWNER}}"
+  GROUP="${DEPLOY_GROUP:-${GROUP}}"
+  SOURCE_DIR="${DEPLOY_SOURCE_DIR:-${SOURCE_DIR}}"
+  RELOAD_OPCACHE="${DEPLOY_RELOAD_OPCACHE:-${RELOAD_OPCACHE}}"
+  FULL_PERMS="${DEPLOY_FULL_PERMS:-${FULL_PERMS}}"
+}
+
+load_env_file() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    echo "Error: env file does not exist: ${file}" >&2
+    exit 1
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "${file}"
+  set +a
+  apply_env_defaults
+}
 
 usage() {
   cat <<'EOF'
@@ -35,30 +63,23 @@ Options:
   --dry-run            Show changes without writing
   --delete             Delete remote files that are missing locally
   --no-perms           Skip remote chmod/chown step
+  --full-perms         Force full chmod/chown scan over project (slow)
+  --no-opcache-reload  Skip OPCache/app service reload after deploy
   -h, --help           Show this help
 
 Notes:
   - Content of storage/ and OperatorWayBill/ is not synchronized.
   - Directories storage/ and OperatorWayBill/ are created on remote if missing.
   - If env file exists, variables DEPLOY_* are used as defaults.
+  - By default, ownership/perms are applied only to changed files via rsync.
 EOF
 }
 
 if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
+  load_env_file "${ENV_FILE}"
 fi
 
-REMOTE_HOST="${DEPLOY_REMOTE_HOST:-${REMOTE_HOST}}"
-REMOTE_USER="${DEPLOY_REMOTE_USER:-${REMOTE_USER}}"
-REMOTE_PORT="${DEPLOY_REMOTE_PORT:-${REMOTE_PORT}}"
-REMOTE_PATH="${DEPLOY_REMOTE_PATH:-${REMOTE_PATH}}"
-SSH_KEY="${DEPLOY_SSH_KEY:-${SSH_KEY}}"
-OWNER="${DEPLOY_OWNER:-${OWNER}}"
-GROUP="${DEPLOY_GROUP:-${GROUP}}"
-SOURCE_DIR="${DEPLOY_SOURCE_DIR:-${SOURCE_DIR}}"
+apply_env_defaults
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -70,22 +91,7 @@ while [[ $# -gt 0 ]]; do
     --env-file)
       ENV_FILE="${2:-}"
       shift 2
-      if [[ ! -f "${ENV_FILE}" ]]; then
-        echo "Error: env file does not exist: ${ENV_FILE}" >&2
-        exit 1
-      fi
-      set -a
-      # shellcheck disable=SC1090
-      source "${ENV_FILE}"
-      set +a
-      REMOTE_HOST="${DEPLOY_REMOTE_HOST:-${REMOTE_HOST}}"
-      REMOTE_USER="${DEPLOY_REMOTE_USER:-${REMOTE_USER}}"
-      REMOTE_PORT="${DEPLOY_REMOTE_PORT:-${REMOTE_PORT}}"
-      REMOTE_PATH="${DEPLOY_REMOTE_PATH:-${REMOTE_PATH}}"
-      SSH_KEY="${DEPLOY_SSH_KEY:-${SSH_KEY}}"
-      OWNER="${DEPLOY_OWNER:-${OWNER}}"
-      GROUP="${DEPLOY_GROUP:-${GROUP}}"
-      SOURCE_DIR="${DEPLOY_SOURCE_DIR:-${SOURCE_DIR}}"
+      load_env_file "${ENV_FILE}"
       ;;
     --key) SSH_KEY="${2:-}"; shift 2 ;;
     --owner) OWNER="${2:-}"; shift 2 ;;
@@ -93,6 +99,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN="1"; shift ;;
     --delete) DELETE_MODE="1"; shift ;;
     --no-perms) APPLY_PERMS="0"; shift ;;
+    --full-perms) FULL_PERMS="1"; shift ;;
+    --no-opcache-reload) RELOAD_OPCACHE="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -116,7 +124,6 @@ fi
 
 RSYNC_OPTS=(
   -az
-  --checksum
   --omit-dir-times
   --no-perms
   --no-owner
@@ -127,6 +134,13 @@ RSYNC_OPTS=(
   --exclude='/storage/**'
   --exclude='/OperatorWayBill/**'
 )
+
+if [[ "${APPLY_PERMS}" == "1" ]]; then
+  RSYNC_OPTS+=(
+    "--chown=${OWNER}:${GROUP}"
+    --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
+  )
+fi
 
 if [[ "${DELETE_MODE}" == "1" ]]; then
   RSYNC_OPTS+=(--delete)
@@ -149,13 +163,13 @@ echo "Syncing ${SOURCE_DIR} -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
 rsync "${RSYNC_OPTS[@]}" -e "ssh ${SSH_OPTS[*]}" \
   "${SOURCE_DIR}/" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
 
-if [[ "${APPLY_PERMS}" == "1" && "${DRY_RUN}" != "1" ]]; then
-  echo "Applying ownership and permissions on remote"
+if [[ "${APPLY_PERMS}" == "1" && "${FULL_PERMS}" == "1" && "${DRY_RUN}" != "1" ]]; then
+  echo "Running full ownership/permissions scan on remote (slow)"
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
     "TARGET='${REMOTE_PATH}' OWNER='${OWNER}' GROUP='${GROUP}' bash -s" <<'EOF'
 set -euo pipefail
 mkdir -p "${TARGET}/storage" "${TARGET}/OperatorWayBill"
-chown "${OWNER}:${GROUP}" "${TARGET}" "${TARGET}/storage" "${TARGET}/OperatorWayBill"
+chown "${OWNER}:${GROUP}" "${TARGET}" "${TARGET}/storage" "${TARGET}/OperatorWayBill" || true
 
 find "${TARGET}" \
   \( -path "${TARGET}/storage" -o -path "${TARGET}/storage/*" -o \
@@ -172,7 +186,44 @@ find "${TARGET}" \
      -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" \) \
   -prune -o -type f -exec chmod 644 {} +
 
-chmod 775 "${TARGET}/storage" "${TARGET}/OperatorWayBill"
+# Runtime directories are managed outside deploy sync.
+chmod 775 "${TARGET}/storage" "${TARGET}/OperatorWayBill" || true
+EOF
+fi
+
+if [[ "${RELOAD_OPCACHE}" == "1" && "${DRY_RUN}" != "1" ]]; then
+  echo "Reloading PHP/Apache services to refresh OPCache"
+  ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "bash -s" <<'EOF'
+set -euo pipefail
+reloaded=0
+
+reload_service() {
+  local svc="$1"
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "${svc}.service"; then
+      systemctl reload "${svc}" 2>/dev/null || systemctl restart "${svc}" 2>/dev/null
+      return 0
+    fi
+  fi
+  if command -v service >/dev/null 2>&1; then
+    if service "${svc}" status >/dev/null 2>&1; then
+      service "${svc}" reload >/dev/null 2>&1 || service "${svc}" restart >/dev/null 2>&1
+      return 0
+    fi
+  fi
+  return 1
+}
+
+for svc in php7.0-fpm php7.1-fpm php7.2-fpm php7.3-fpm php7.4-fpm php8.0-fpm php8.1-fpm php8.2-fpm php8.3-fpm apache2; do
+  if reload_service "${svc}"; then
+    echo "Reloaded ${svc}"
+    reloaded=1
+  fi
+done
+
+if [[ "${reloaded}" != "1" ]]; then
+  echo "Warning: no known php-fpm/apache service found to reload" >&2
+fi
 EOF
 fi
 

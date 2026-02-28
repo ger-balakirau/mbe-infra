@@ -45,3 +45,31 @@ docker compose ps
 - `docs/dev-infra.md`
 - `docs/commands.md`
 - `docs/git.md`
+
+## Deploy (infra)
+
+1. Создайте deploy-конфиг:
+
+```bash
+cp .env.deploy.example .env.deploy
+```
+
+2. Заполните `.env.deploy` (хост, путь, ключ).
+
+3. Проверка без изменений:
+
+```bash
+make deploy-dry
+```
+
+4. Деплой:
+
+```bash
+make deploy
+```
+
+Примечание:
+- `storage/` и `OperatorWayBill/` не синхронизируются.
+- Права на файлы применяются только к измененным файлам через `rsync` (быстро, без полного прохода по проекту).
+- Полный прогон прав (медленно) запускается отдельно: `make deploy-full-perms`.
+- После деплоя скрипт делает reload php/apache для обновления OPCache.

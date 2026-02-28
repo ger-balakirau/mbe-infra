@@ -76,3 +76,35 @@ pv "$FILE" \
   | mbe exec -T mysql \
     mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"
 ```
+
+## Deploy на сервер
+
+Подготовка:
+
+```bash
+cp .env.deploy.example .env.deploy
+```
+
+Проверить изменения (без применения):
+
+```bash
+make deploy-dry
+```
+
+Реальный деплой:
+
+```bash
+make deploy
+```
+
+Полный прогон прав по всему проекту (редко, медленно):
+
+```bash
+make deploy-full-perms
+```
+
+При необходимости можно временно переопределить хост:
+
+```bash
+make deploy HOST=203.0.113.10
+```
