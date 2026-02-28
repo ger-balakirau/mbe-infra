@@ -11,6 +11,8 @@
 *.sql.gz
 *.log
 .DS_Store
+/dump/*
+!/dump/.gitkeep
 
 # IDE
 .idea/
