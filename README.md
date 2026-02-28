@@ -32,10 +32,10 @@ make ps
 
 ## Документация
 
-- Полная установка с нуля (новый ПК, git clone, создание папок, запуск): `docs/getting-started.md`
-- Все команды `make` с описанием: `docs/commands.md`
-- Техническое описание dev-инфры: `docs/dev-infra.md`
-- Git workflow для infra-репозитория: `docs/git.md`
+- [Полная установка с нуля (новый ПК, git clone, создание папок, запуск)](docs/getting-started.md)
+- [Все команды `make` с описанием](docs/commands.md)
+- [Техническое описание dev-инфры](docs/dev-infra.md)
+- [Git workflow для infra-репозитория](docs/git.md)
 
 ## Deploy (кратко)
 
