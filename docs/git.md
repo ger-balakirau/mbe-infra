@@ -1,33 +1,42 @@
-# Git (Infra Repo)
+# Git Workflow (Infra Repo)
 
-## Первый коммит
+Репозиторий уже существует, поэтому базовый путь: `clone -> pull -> commit -> push`.
+
+Полная установка с нуля (включая `git clone`) описана в `docs/getting-started.md`.
+
+## Клонирование
 
 ```bash
-git init
-git switch -c main
-git add -A
-git commit -m "infra: docker dev stack"
+mkdir -p ~/projects
+cd ~/projects
+git clone <INFRA_REPO_URL> MBE
+cd MBE
 ```
 
-## Проверка перед пушем
+## Перед началом работы
 
 ```bash
-docker compose config >/dev/null
+git pull --ff-only
 git status --short
 ```
 
-## Пуш
+## Проверка перед коммитом
 
 ```bash
-git remote add origin git@github.com:USER/REPO.git
-git push -u origin main
+make help >/dev/null
+git status --short
 ```
 
-## Ежедневный цикл
+## Коммит и пуш
 
 ```bash
-git status
 git add -A
-git commit -m "infra: update"
+git commit -m "docs: update instructions"
 git push
 ```
+
+## Полезно
+
+- `git diff` — посмотреть изменения до `git add`
+- `git restore --staged <file>` — убрать файл из staged
+- `git log --oneline -20` — последние 20 коммитов

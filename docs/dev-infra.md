@@ -1,36 +1,37 @@
 # MBE Dev Infra
 
-Legacy-only dev окружение. Стек EOL (PHP 7.0, Debian Stretch, MySQL 5.7) сохранён для совместимости с проектом.
+Техническое описание инфраструктуры для legacy CRM.
 
-## Состав
+Стек: `PHP 7.0`, `Debian Stretch`, `MySQL 5.7`.
 
-- `Dockerfile`
-- `docker-compose.yml`
-- `prod.conf/`
-- `env.example`
+## Назначение
 
-## Запуск
+- локальная разработка и отладка legacy CRM;
+- воспроизводимое окружение через Docker Compose;
+- управляемый deploy через `scripts/deploy/push-crm.sh`.
 
-```bash
-cp env.example .env
-```
+## Состав репозитория
 
-Проверьте, что путь в `.env` (`APP_CODE_PATH`) указывает на каталог, где есть `crm`.
+- `docker-compose.yml` — сервисы `apache` и `mysql`;
+- `Dockerfile` — образ приложения (`apache` + PHP 7);
+- `prod.conf/` — конфиги Apache/MySQL/PHP;
+- `configs/crm/` — runtime-конфиги CRM, монтируемые в контейнер;
+- `scripts/deploy/push-crm.sh` — деплой на сервер через `rsync + ssh`;
+- `Makefile` — единая точка входа для локальных команд.
 
-```bash
-make up-build
-make ps
-make logs
-```
+## Runtime-конфиги CRM
 
-CRM: `http://localhost:8081`
+В `configs/crm/` хранятся файлы, которые монтируются в CRM поверх кода:
 
-MySQL: `127.0.0.1:33063`
+- `config.inc.php`
+- `config.csrf-secret.php`
+- `config_override.php`
+- `.mbe` (по умолчанию используется `.mbe.example`)
 
-## Управление через Makefile
+Это позволяет хранить критичные runtime-настройки в infra-репозитории отдельно от кода CRM.
 
-```bash
-make help
-```
+## Навигация по документации
 
-`make` — основной интерфейс для локальной работы (compose, CRM-команды, backup/restore, deploy).
+- Полный запуск с нуля: `docs/getting-started.md`
+- Справочник всех команд: `docs/commands.md`
+- Git workflow: `docs/git.md`
