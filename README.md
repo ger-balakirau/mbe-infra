@@ -6,6 +6,8 @@ EOL legacy dev-инфраструктура для CRM (PHP 7.0, Debian Stretch,
 
 ```bash
 cp env.example .env
+mkdir -p html/mbelab.com
+git clone <PRIVATE_CRM_REPO_URL> html/mbelab.com/crm
 docker compose up -d --build
 docker compose ps
 ```
