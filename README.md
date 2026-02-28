@@ -25,6 +25,16 @@ docker compose ps
 - Эти файлы не находятся в git-репозитории кода приложения (`html/mbelab.com/crm`), только в инфра-репо.
 - Для переноса на другую машину достаточно перенести infra-репо + код CRM и заполнить `.env`.
 
+### Режим ошибок PHP в CRM
+
+В `configs/crm/config.inc.php` режим переключается комментариями в секции `Adjust error_reporting favourable to deployment`:
+
+- `PRODUCTION` (по умолчанию): активна первая строка, предупреждения не выводятся в браузер.
+- `DEBUGGING`: раскомментировать строку с `//ini_set('display_errors','on'); ... // DEBUGGING`.
+- `STRICT DEVELOPMENT`: раскомментировать строку с `//ini_set('display_errors','on'); error_reporting(E_ALL); // STRICT DEVELOPMENT`.
+
+Важно: одновременно должен быть активен только один режим.
+
 ## Важно
 
 - Только для dev/legacy-совместимости.

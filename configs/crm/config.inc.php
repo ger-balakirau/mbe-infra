@@ -1,4 +1,5 @@
 <?php
+
 /*********************************************************************************
  * The contents of this file are subject to the SugarCRM Public License Version 1.1.2
  * ("License"); You may not use this file except in compliance with the
@@ -6,15 +7,18 @@
  * Software distributed under the License is distributed on an  "AS IS"  basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
-********************************************************************************/
+ ********************************************************************************/
 
-function crm_env($name, $default = '') {
-    $value = getenv($name);
-    return ($value === false || $value === '') ? $default : $value;
+function crm_env($name, $default = '')
+{
+  $value = getenv($name);
+  return ($value === false || $value === '') ? $default : $value;
 }
 
 // Adjust error_reporting favourable to deployment.
-version_compare(PHP_VERSION, '5.5.0') <= 0 ? error_reporting(E_WARNING & ~E_NOTICE & ~E_DEPRECATED & E_ERROR) : error_reporting(E_WARNING & ~E_NOTICE & ~E_DEPRECATED & E_ERROR & ~E_STRICT);
+version_compare(PHP_VERSION, '5.5.0') <= 0 ? error_reporting(E_WARNING & ~E_NOTICE & ~E_DEPRECATED & E_ERROR) : error_reporting(E_WARNING & ~E_NOTICE & ~E_DEPRECATED  & E_ERROR & ~E_STRICT); // PRODUCTION
+//ini_set('display_errors','on'); version_compare(PHP_VERSION, '5.5.0') <= 0 ? error_reporting(E_WARNING & ~E_NOTICE & ~E_DEPRECATED) : error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_STRICT);   // DEBUGGING
+//ini_set('display_errors','on'); error_reporting(E_ALL); // STRICT DEVELOPMENT
 
 include('vtigerversion.php');
 
@@ -96,7 +100,7 @@ $php_max_execution_time = 0;
 $default_timezone = crm_env('TZ', 'Europe/Moscow');
 
 if (isset($default_timezone) && function_exists('date_default_timezone_set')) {
-    @date_default_timezone_set($default_timezone);
+  @date_default_timezone_set($default_timezone);
 }
 
 $default_layout = 'v7';
