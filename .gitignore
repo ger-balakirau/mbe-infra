@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+# App/source code (infra-only repo)
+/html/
+/crm/
+
+# Local runtime artifacts
+*.sql
+*.sql.gz
+*.log
+.DS_Store
+
+# IDE
+.idea/
+*.iml
