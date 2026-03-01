@@ -12,24 +12,23 @@
 ## Быстрый старт
 
 ```bash
-cp env.example .env
-mkdir -p html/mbelab.com
-git clone <PRIVATE_CRM_REPO_URL> html/mbelab.com/crm
+mkdir -p ~/projects
+cd ~/projects
+git clone https://github.com/ger-balakirau/mbe-infra.git mbelab
+cd ~/projects/mbelab
+git clone <PRIVATE_CRM_REPO> html/mbelab.com/crm
 make up-build
+make db-import FILE=dump/<YOUR_FILE>.sql.gz
+cp env.example .env
+make crm-init
 make ps
 ```
 
 - CRM: `http://localhost:8081`
 - MySQL: `127.0.0.1:33063`
 
-> **ВАЖНО:** <u>без импорта рабочего дампа базы данных CRM не будет нормально работать.</u>  
-> Интерфейс может открываться, но данные, бизнес-процессы и cron-задачи будут работать некорректно.
->
-> Последовательность после `make up-build`:
-> ```bash
-> make db-import FILE=dump/<YOUR_FILE>.sql.gz
-> make crm-init
-> ```
+> **ВАЖНО:** <u>без импорта рабочего дампа базы данных CRM не будет работать.</u>  
+> Интерфейс может открываться, но данные, бизнес-процессы и cron-задачи не будут работать.
 
 ## Документация
 
