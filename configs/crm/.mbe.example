@@ -1,2 +1,4 @@
-# htpasswd format example:
-# admin:$apr1$example$xxxxxxxxxxxxxxxxxxxxxx
+# Dev-only htpasswd for protected CRM endpoints.
+# Username: dev
+# Password: dev
+dev:$apr1$mbedev$rcWDrNQgKz7Up9wQwIDD31

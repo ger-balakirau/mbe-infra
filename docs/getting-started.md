@@ -51,7 +51,19 @@ cp env.example .env
 - `CRM_CONFIG_PATH=./configs/crm` (обычно оставляем как есть)
 - параметры MySQL заполнены
 
-## 5) Первый запуск
+## 5) Проверка `.mbe` для защищенных endpoint'ов
+
+По умолчанию `docker-compose` монтирует `configs/crm/.mbe.example` как `crm/.mbe`.
+
+В репозитории уже лежит валидный dev-вариант:
+
+- login: `dev`
+- password: `dev`
+
+Этого достаточно для локальной разработки после `git clone` без дополнительных ручных шагов.
+Для production обязательно замените файл на свои реальные учетные данные.
+
+## 6) Первый запуск
 
 ```bash
 make up-build
@@ -82,7 +94,7 @@ make logs
 make down
 ```
 
-## 6) Ежедневная работа
+## 7) Ежедневная работа
 
 Обычно достаточно:
 
@@ -104,14 +116,14 @@ make rebuild
 make up
 ```
 
-## 7) Базовые команды CRM
+## 8) Базовые команды CRM
 
 ```bash
 make tracking
 make vtiger-cron
 ```
 
-## 8) Бэкап и импорт БД
+## 9) Бэкап и импорт БД
 
 Создать дамп:
 
@@ -125,7 +137,7 @@ make db-dump
 make db-import FILE=dump/<YOUR_FILE>.sql.gz
 ```
 
-## 9) Deploy (опционально)
+## 10) Deploy (опционально)
 
 Создать deploy-конфиг:
 
@@ -145,7 +157,7 @@ make deploy-dry
 make deploy
 ```
 
-## 10) Если что-то не работает
+## 11) Если что-то не работает
 
 1. Проверить статусы: `make ps`
 2. Посмотреть логи: `make logs` и `make logs SERVICE=mysql`
