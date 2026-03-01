@@ -72,7 +72,7 @@ Options:
   --key <path>         SSH private key
   --owner <owner>      Ownership user on remote (default: www-data)
   --group <group>      Ownership group on remote (default: www-data)
-  --dry-run            Show changes without writing (requires existing remote dirs)
+  --dry-run            Show changes without writing (requires existing remote runtime layout)
   --delete             Delete remote files that are missing locally
   --no-perms           Skip remote chmod/chown step
   --full-perms         Force full chmod/chown scan over project (slow)
@@ -82,9 +82,13 @@ Options:
 
 Notes:
   - Legacy deploy target: Debian Stretch + PHP 7.x + Apache 2.
-  - Content of storage/ and OperatorWayBill/ is not synchronized.
-  - config.inc.php is NOT synchronized by default.
-  - Directories storage/ and OperatorWayBill/ are created on remote if missing.
+  - Runtime/generated paths are NOT synchronized by default:
+    storage/, OperatorWayBill/, cache/, user_privileges/, kcfinder/upload/, cron/output.txt
+  - Local secret files are NOT synchronized by default:
+    .mbe, config.csrf-secret.php, config_override.php, config.inc.php
+  - config.inc.php can be enabled explicitly with --with-config-inc.
+  - Runtime dirs/files are created on remote in normal mode (non --dry-run).
+  - In --dry-run mode script only verifies remote runtime layout and fails if missing.
   - If env file exists, variables DEPLOY_* are used as defaults.
   - CLI options always override env defaults, regardless of argument order.
   - By default, ownership/perms are applied only to changed files via rsync.
@@ -161,6 +165,112 @@ if [[ ! -d "${SOURCE_DIR}" ]]; then
   exit 1
 fi
 
+prepare_remote_runtime_layout() {
+  # shellcheck disable=SC2029
+  ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+    "TARGET='${REMOTE_PATH}' OWNER='${OWNER}' GROUP='${GROUP}' APPLY_PERMS='${APPLY_PERMS}' bash -s" <<'EOF'
+set -euo pipefail
+
+mkdir -p \
+  "${TARGET}" \
+  "${TARGET}/storage" \
+  "${TARGET}/OperatorWayBill" \
+  "${TARGET}/cache" \
+  "${TARGET}/user_privileges" \
+  "${TARGET}/kcfinder" \
+  "${TARGET}/kcfinder/upload" \
+  "${TARGET}/cron"
+
+[[ -f "${TARGET}/user_privileges/index.html" ]] || printf '%s\n' '<html><body></body></html>' > "${TARGET}/user_privileges/index.html"
+[[ -f "${TARGET}/user_privileges/audit_trail.php" ]] || printf '%s\n' '<?php' > "${TARGET}/user_privileges/audit_trail.php"
+[[ -f "${TARGET}/user_privileges/default_module_view.php" ]] || printf '%s\n' '<?php' > "${TARGET}/user_privileges/default_module_view.php"
+[[ -f "${TARGET}/user_privileges/enable_backup.php" ]] || printf '%s\n' '<?php' > "${TARGET}/user_privileges/enable_backup.php"
+[[ -f "${TARGET}/cron/output.txt" ]] || : > "${TARGET}/cron/output.txt"
+
+if [[ "${APPLY_PERMS}" == "1" ]]; then
+  chown "${OWNER}:${GROUP}" \
+    "${TARGET}" \
+    "${TARGET}/storage" \
+    "${TARGET}/OperatorWayBill" \
+    "${TARGET}/cache" \
+    "${TARGET}/user_privileges" \
+    "${TARGET}/kcfinder" \
+    "${TARGET}/kcfinder/upload" \
+    "${TARGET}/cron" \
+    "${TARGET}/user_privileges/index.html" \
+    "${TARGET}/user_privileges/audit_trail.php" \
+    "${TARGET}/user_privileges/default_module_view.php" \
+    "${TARGET}/user_privileges/enable_backup.php" \
+    "${TARGET}/cron/output.txt" || true
+
+  chmod 755 "${TARGET}" "${TARGET}/kcfinder" || true
+  chmod 775 \
+    "${TARGET}/storage" \
+    "${TARGET}/OperatorWayBill" \
+    "${TARGET}/cache" \
+    "${TARGET}/user_privileges" \
+    "${TARGET}/kcfinder/upload" \
+    "${TARGET}/cron" || true
+  chmod 664 \
+    "${TARGET}/user_privileges/index.html" \
+    "${TARGET}/user_privileges/audit_trail.php" \
+    "${TARGET}/user_privileges/default_module_view.php" \
+    "${TARGET}/user_privileges/enable_backup.php" \
+    "${TARGET}/cron/output.txt" || true
+fi
+EOF
+}
+
+check_remote_runtime_layout() {
+  local missing
+  missing="$(
+    # shellcheck disable=SC2029
+    ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
+      "TARGET='${REMOTE_PATH}' bash -s" <<'EOF'
+set -euo pipefail
+
+missing=()
+
+for dir in \
+  "${TARGET}" \
+  "${TARGET}/storage" \
+  "${TARGET}/OperatorWayBill" \
+  "${TARGET}/cache" \
+  "${TARGET}/user_privileges" \
+  "${TARGET}/kcfinder" \
+  "${TARGET}/kcfinder/upload" \
+  "${TARGET}/cron"
+do
+  [[ -d "${dir}" ]] || missing+=("${dir}")
+done
+
+for file in \
+  "${TARGET}/user_privileges/index.html" \
+  "${TARGET}/user_privileges/audit_trail.php" \
+  "${TARGET}/user_privileges/default_module_view.php" \
+  "${TARGET}/user_privileges/enable_backup.php" \
+  "${TARGET}/cron/output.txt"
+do
+  [[ -f "${file}" ]] || missing+=("${file}")
+done
+
+if [[ "${#missing[@]}" -gt 0 ]]; then
+  printf '%s\n' "${missing[@]}"
+fi
+EOF
+  )"
+
+  if [[ -n "${missing}" ]]; then
+    echo "Error: missing remote runtime paths for dry-run:" >&2
+    while IFS= read -r path; do
+      [[ -z "${path}" ]] && continue
+      echo "  - ${path}" >&2
+    done <<< "${missing}"
+    echo "Run deploy once without --dry-run to create missing runtime dirs/files." >&2
+    exit 1
+  fi
+}
+
 SSH_OPTS=(-p "${REMOTE_PORT}")
 if [[ -n "${SSH_KEY}" ]]; then
   SSH_OPTS+=(-i "${SSH_KEY}")
@@ -175,8 +285,15 @@ RSYNC_OPTS=(
   --exclude='.git/'
   --exclude='.gitignore'
   --exclude='.git-ftp.log'
-  --exclude='/storage/**'
-  --exclude='/OperatorWayBill/**'
+  --exclude='/.mbe'
+  --exclude='/config.csrf-secret.php'
+  --exclude='/config_override.php'
+  --exclude='/storage/***'
+  --exclude='/OperatorWayBill/***'
+  --exclude='/cache/***'
+  --exclude='/user_privileges/***'
+  --exclude='/kcfinder/upload/***'
+  --exclude='/cron/output.txt'
 )
 
 if [[ "${INCLUDE_CONFIG_INC}" != "1" ]]; then
@@ -200,16 +317,11 @@ if [[ "${DRY_RUN}" == "1" ]]; then
 fi
 
 if [[ "${DRY_RUN}" == "1" ]]; then
-  echo "Checking remote directories on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-  if ! ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
-    "test -d '${REMOTE_PATH}' && test -d '${REMOTE_PATH}/storage' && test -d '${REMOTE_PATH}/OperatorWayBill'"; then
-    echo "Error: missing remote directories for dry-run. Run deploy once without --dry-run to create them." >&2
-    exit 1
-  fi
+  echo "Checking remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+  check_remote_runtime_layout
 else
-  echo "Preparing remote directories on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-  ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
-    "mkdir -p '${REMOTE_PATH}' '${REMOTE_PATH}/storage' '${REMOTE_PATH}/OperatorWayBill'"
+  echo "Preparing remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+  prepare_remote_runtime_layout
 fi
 
 echo "Syncing ${SOURCE_DIR} -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
@@ -218,29 +330,55 @@ rsync "${RSYNC_OPTS[@]}" -e "ssh ${SSH_OPTS[*]}" \
 
 if [[ "${APPLY_PERMS}" == "1" && "${FULL_PERMS}" == "1" && "${DRY_RUN}" != "1" ]]; then
   echo "Running full ownership/permissions scan on remote (slow)"
+  # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
     "TARGET='${REMOTE_PATH}' OWNER='${OWNER}' GROUP='${GROUP}' bash -s" <<'EOF'
 set -euo pipefail
-mkdir -p "${TARGET}/storage" "${TARGET}/OperatorWayBill"
-chown "${OWNER}:${GROUP}" "${TARGET}" "${TARGET}/storage" "${TARGET}/OperatorWayBill" || true
+mkdir -p "${TARGET}/storage" "${TARGET}/OperatorWayBill" "${TARGET}/cache" "${TARGET}/user_privileges" "${TARGET}/kcfinder/upload" "${TARGET}/cron"
+chown "${OWNER}:${GROUP}" \
+  "${TARGET}" \
+  "${TARGET}/storage" \
+  "${TARGET}/OperatorWayBill" \
+  "${TARGET}/cache" \
+  "${TARGET}/user_privileges" \
+  "${TARGET}/kcfinder/upload" \
+  "${TARGET}/cron" || true
 
 find "${TARGET}" \
   \( -path "${TARGET}/storage" -o -path "${TARGET}/storage/*" -o \
-     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" \) \
+     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" -o \
+     -path "${TARGET}/cache" -o -path "${TARGET}/cache/*" -o \
+     -path "${TARGET}/user_privileges" -o -path "${TARGET}/user_privileges/*" -o \
+     -path "${TARGET}/kcfinder/upload" -o -path "${TARGET}/kcfinder/upload/*" -o \
+     -path "${TARGET}/cron" -o -path "${TARGET}/cron/*" \) \
   -prune -o -exec chown "${OWNER}:${GROUP}" {} +
 
 find "${TARGET}" \
   \( -path "${TARGET}/storage" -o -path "${TARGET}/storage/*" -o \
-     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" \) \
+     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" -o \
+     -path "${TARGET}/cache" -o -path "${TARGET}/cache/*" -o \
+     -path "${TARGET}/user_privileges" -o -path "${TARGET}/user_privileges/*" -o \
+     -path "${TARGET}/kcfinder/upload" -o -path "${TARGET}/kcfinder/upload/*" -o \
+     -path "${TARGET}/cron" -o -path "${TARGET}/cron/*" \) \
   -prune -o -type d -exec chmod 755 {} +
 
 find "${TARGET}" \
   \( -path "${TARGET}/storage" -o -path "${TARGET}/storage/*" -o \
-     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" \) \
+     -path "${TARGET}/OperatorWayBill" -o -path "${TARGET}/OperatorWayBill/*" -o \
+     -path "${TARGET}/cache" -o -path "${TARGET}/cache/*" -o \
+     -path "${TARGET}/user_privileges" -o -path "${TARGET}/user_privileges/*" -o \
+     -path "${TARGET}/kcfinder/upload" -o -path "${TARGET}/kcfinder/upload/*" -o \
+     -path "${TARGET}/cron" -o -path "${TARGET}/cron/*" \) \
   -prune -o -type f -exec chmod 644 {} +
 
 # Runtime directories are managed outside deploy sync.
-chmod 775 "${TARGET}/storage" "${TARGET}/OperatorWayBill" || true
+chmod 775 \
+  "${TARGET}/storage" \
+  "${TARGET}/OperatorWayBill" \
+  "${TARGET}/cache" \
+  "${TARGET}/user_privileges" \
+  "${TARGET}/kcfinder/upload" \
+  "${TARGET}/cron" || true
 EOF
 fi
 

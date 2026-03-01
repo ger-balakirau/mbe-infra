@@ -61,6 +61,18 @@ cp .env.deploy.example .env.deploy
 | `make deploy-dry` | Проверка деплоя без изменений |
 | `make deploy-full-perms` | Деплой + полный медленный `chmod/chown` прогон |
 
+Что синхронизируется по умолчанию:
+
+- Синхронизируется код CRM.
+- Не синхронизируются локальные runtime/generated данные: `storage/`, `OperatorWayBill/`, `cache/`, `user_privileges/`, `kcfinder/upload/`, `cron/output.txt`.
+- Не синхронизируются локальные секреты: `.mbe`, `config.csrf-secret.php`, `config_override.php`, `config.inc.php` (для `config.inc.php` нужен явный `--with-config-inc`).
+
+Поведение `--dry-run`:
+
+- В `--dry-run` скрипт ничего не создает на сервере.
+- `--dry-run` проверяет наличие обязательной runtime-структуры на сервере и завершится ошибкой, если чего-то не хватает.
+- Для "пустого" сервера сначала выполните обычный `make deploy` (без `--dry-run`) для bootstrap директорий/файлов.
+
 Полезные варианты:
 
 ```bash
