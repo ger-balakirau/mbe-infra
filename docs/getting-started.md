@@ -33,7 +33,6 @@ cd mbelab
 По умолчанию инфраструктура ожидает код CRM в `./html/mbelab.com/crm`.
 
 ```bash
-mkdir -p html/mbelab.com
 git clone <PRIVATE_CRM_REPO_URL> html/mbelab.com/crm
 ```
 
@@ -80,6 +79,7 @@ make ps
 > ```
 
 `make crm-init` безопасно запускать повторно. Команда:
+
 - подготавливает runtime-каталоги/файлы, которые обычно не лежат в git (`includes/runtime/cache`, `user_privileges`);
 - пересоздает `user_privileges_*.php` и `sharing_privileges_*.php` из текущей БД.
 
