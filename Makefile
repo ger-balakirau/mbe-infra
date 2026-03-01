@@ -9,7 +9,7 @@ SERVICE ?= $(APACHE_SERVICE)
 
 .PHONY: help \
 	up up-build rebuild down restart ps logs sh-apache compose-exec \
-	tracking vtiger-cron \
+	tracking vtiger-cron crm-init \
 	db-dump db-dump-pv db-import db-import-pv mysql-show-mode mysql-legacy-mode \
 	deploy deploy-dry deploy-full-perms
 
@@ -29,6 +29,7 @@ help:
 	@echo "CRM:"
 	@echo "  make tracking       # php Tracking.php in apache container"
 	@echo "  make vtiger-cron    # php vtigercron.php in apache container"
+	@echo "  make crm-init       # bootstrap missing CRM runtime files and privileges"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-dump        # dump DB to $(DUMP_DIR)/<db>_<date>.sql.gz"
@@ -89,6 +90,9 @@ tracking:
 
 vtiger-cron:
 	$(COMPOSE) exec -T $(APACHE_SERVICE) php vtigercron.php
+
+crm-init:
+	@COMPOSE="$(COMPOSE)" APACHE_SERVICE="$(APACHE_SERVICE)" ./scripts/dev/crm-init.sh
 
 db-dump:
 	@mkdir -p "$(DUMP_DIR)"

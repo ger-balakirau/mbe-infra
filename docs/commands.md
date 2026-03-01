@@ -30,6 +30,7 @@ make help
 |---|---|
 | `make tracking` | Запуск `Tracking.php` в `apache` контейнере (ручной трекинг отправлений) |
 | `make vtiger-cron` | Запуск `vtigercron.php` в `apache` контейнере (штатные cron-задачи CRM) |
+| `make crm-init` | Подготовка runtime-файлов CRM (`includes/runtime/cache`, `user_privileges`) и пересборка `user_privileges_*` из БД |
 
 ## Database
 
