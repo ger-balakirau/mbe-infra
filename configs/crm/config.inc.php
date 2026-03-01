@@ -34,7 +34,7 @@ $CHAT_DISPLAY = 'true';
 $USE_RTE = 'true';
 
 $HELPDESK_SUPPORT_EMAIL_ID = crm_env('CRM_HELPDESK_EMAIL', 'support@example.local');
-$HELPDESK_SUPPORT_NAME = crm_env('CRM_HELPDESK_NAME', 'MBE CRM Team');
+$HELPDESK_SUPPORT_NAME = crm_env('CRM_HELPDESK_NAME', 'mbelab CRM Team');
 $HELPDESK_SUPPORT_EMAIL_REPLY_ID = $HELPDESK_SUPPORT_EMAIL_ID;
 
 $dbconfig['db_server'] = crm_env('CRM_DB_HOST', crm_env('MYSQL_CONTAINER', 'mysql'));

@@ -1,4 +1,4 @@
-# MBE Legacy Dev Infra
+# mbelab Legacy Dev Infra
 
 Инфраструктурный репозиторий для legacy CRM: `PHP 7.0 + Debian Stretch + MySQL 5.7`.
 

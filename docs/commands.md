@@ -1,4 +1,4 @@
-# MBE Commands
+# mbelab Commands
 
 Основной интерфейс для локальной работы: `make`.
 Установка проекта с нуля: `docs/getting-started.md`.

@@ -1,4 +1,4 @@
-# MBE Dev Infra
+# mbelab Dev Infra
 
 Техническое описание инфраструктуры для legacy CRM.
 

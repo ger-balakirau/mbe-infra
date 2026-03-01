@@ -24,8 +24,8 @@ make --version
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone <INFRA_REPO_URL> MBE
-cd MBE
+git clone <INFRA_REPO_URL> mbelab
+cd mbelab
 ```
 
 ## 3) Подготовьте папки с кодом CRM
