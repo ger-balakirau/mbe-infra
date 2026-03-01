@@ -17,9 +17,9 @@ cd ~/projects
 git clone https://github.com/ger-balakirau/mbe-infra.git mbelab
 cd ~/projects/mbelab
 git clone <PRIVATE_CRM_REPO> html/mbelab.com/crm
+cp env.example .env
 make up-build
 make db-import FILE=dump/<YOUR_FILE>.sql.gz
-cp env.example .env
 make crm-init
 make ps
 ```
