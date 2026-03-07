@@ -16,9 +16,11 @@ GROUP="www-data"
 DRY_RUN="0"
 DELETE_MODE="0"
 APPLY_PERMS="1"
-RELOAD_OPCACHE="1"
+RELOAD_OPCACHE="0"
 FULL_PERMS="0"
 INCLUDE_CONFIG_INC="0"
+INCLUDE_RUNTIME_DATA="0"
+SYNC_MODE="push"
 ENV_FILE_EXPLICIT="0"
 
 require_option_value() {
@@ -42,6 +44,7 @@ apply_env_defaults() {
   RELOAD_OPCACHE="${DEPLOY_RELOAD_OPCACHE:-${RELOAD_OPCACHE}}"
   FULL_PERMS="${DEPLOY_FULL_PERMS:-${FULL_PERMS}}"
   INCLUDE_CONFIG_INC="${DEPLOY_INCLUDE_CONFIG_INC:-${INCLUDE_CONFIG_INC}}"
+  INCLUDE_RUNTIME_DATA="${DEPLOY_INCLUDE_RUNTIME_DATA:-${INCLUDE_RUNTIME_DATA}}"
 }
 
 load_env_file() {
@@ -73,22 +76,26 @@ Options:
   --owner <owner>      Ownership user on remote (default: www-data)
   --group <group>      Ownership group on remote (default: www-data)
   --dry-run            Show changes without writing (requires existing remote runtime layout)
-  --delete             Delete remote files that are missing locally
+  --delete             Delete destination files that are missing in source
+  --pull               Sync from remote server to local source path (server -> local)
   --no-perms           Skip remote chmod/chown step
   --full-perms         Force full chmod/chown scan over project (slow)
   --with-config-inc    Include config.inc.php in sync (disabled by default)
-  --no-opcache-reload  Skip OPCache/app service reload after deploy
+  --with-runtime-data  Include runtime/generated paths in sync (disabled by default)
+  --opcache-reload     Reload Apache service after push deploy (disabled by default)
+  --no-opcache-reload  Explicitly disable Apache reload after push deploy
   -h, --help           Show this help
 
 Notes:
   - Legacy deploy target: Debian Stretch + PHP 7.x + Apache 2.
-  - Runtime/generated paths are NOT synchronized by default:
+  - Runtime/generated paths are NOT synchronized by default (unless --with-runtime-data):
     storage/, OperatorWayBill/, cache/, user_privileges/, kcfinder/upload/, cron/output.txt
   - Local secret files are NOT synchronized by default:
     .mbe, config.csrf-secret.php, config_override.php, config.inc.php
   - config.inc.php can be enabled explicitly with --with-config-inc.
-  - Runtime dirs/files are created on remote in normal mode (non --dry-run).
+  - Runtime dirs/files are created on remote only in push mode (non --dry-run).
   - In --dry-run mode script only verifies remote runtime layout and fails if missing.
+  - In --pull mode script never changes remote permissions and never reloads services.
   - If env file exists, variables DEPLOY_* are used as defaults.
   - CLI options always override env defaults, regardless of argument order.
   - By default, ownership/perms are applied only to changed files via rsync.
@@ -111,7 +118,7 @@ while [[ ${scan_idx} -lt ${#ARGS[@]} ]]; do
       ENV_FILE_EXPLICIT="1"
       scan_idx=$((scan_idx + 2))
       ;;
-    --dry-run|--delete|--no-perms|--full-perms|--with-config-inc|--no-opcache-reload|-h|--help)
+    --dry-run|--delete|--pull|--no-perms|--full-perms|--with-config-inc|--with-runtime-data|--opcache-reload|--no-opcache-reload|-h|--help)
       scan_idx=$((scan_idx + 1))
       ;;
     *)
@@ -145,9 +152,12 @@ while [[ $# -gt 0 ]]; do
     --group) require_option_value "$1" "${2:-}"; GROUP="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --delete) DELETE_MODE="1"; shift ;;
+    --pull) SYNC_MODE="pull"; shift ;;
     --no-perms) APPLY_PERMS="0"; shift ;;
     --full-perms) FULL_PERMS="1"; shift ;;
     --with-config-inc) INCLUDE_CONFIG_INC="1"; shift ;;
+    --with-runtime-data) INCLUDE_RUNTIME_DATA="1"; shift ;;
+    --opcache-reload) RELOAD_OPCACHE="1"; shift ;;
     --no-opcache-reload) RELOAD_OPCACHE="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -163,6 +173,17 @@ fi
 if [[ ! -d "${SOURCE_DIR}" ]]; then
   echo "Error: source path does not exist: ${SOURCE_DIR}" >&2
   exit 1
+fi
+
+if [[ "${SYNC_MODE}" == "pull" ]]; then
+  if [[ "${FULL_PERMS}" == "1" ]]; then
+    echo "Warning: --full-perms is ignored in --pull mode"
+    FULL_PERMS="0"
+  fi
+  if [[ "${RELOAD_OPCACHE}" == "1" ]]; then
+    echo "Warning: --opcache-reload is ignored in --pull mode"
+    RELOAD_OPCACHE="0"
+  fi
 fi
 
 prepare_remote_runtime_layout() {
@@ -288,19 +309,24 @@ RSYNC_OPTS=(
   --exclude='/.mbe'
   --exclude='/config.csrf-secret.php'
   --exclude='/config_override.php'
-  --exclude='/storage/***'
-  --exclude='/OperatorWayBill/***'
-  --exclude='/cache/***'
-  --exclude='/user_privileges/***'
-  --exclude='/kcfinder/upload/***'
-  --exclude='/cron/output.txt'
 )
 
 if [[ "${INCLUDE_CONFIG_INC}" != "1" ]]; then
   RSYNC_OPTS+=(--exclude='/config.inc.php')
 fi
 
-if [[ "${APPLY_PERMS}" == "1" ]]; then
+if [[ "${INCLUDE_RUNTIME_DATA}" != "1" ]]; then
+  RSYNC_OPTS+=(
+    --exclude='/storage/***'
+    --exclude='/OperatorWayBill/***'
+    --exclude='/cache/***'
+    --exclude='/user_privileges/***'
+    --exclude='/kcfinder/upload/***'
+    --exclude='/cron/output.txt'
+  )
+fi
+
+if [[ "${SYNC_MODE}" == "push" && "${APPLY_PERMS}" == "1" ]]; then
   RSYNC_OPTS+=(
     "--chown=${OWNER}:${GROUP}"
     "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"
@@ -316,19 +342,25 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   echo "Dry run mode enabled"
 fi
 
-if [[ "${DRY_RUN}" == "1" ]]; then
-  echo "Checking remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-  check_remote_runtime_layout
+if [[ "${SYNC_MODE}" == "push" ]]; then
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    echo "Checking remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+    check_remote_runtime_layout
+  else
+    echo "Preparing remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+    prepare_remote_runtime_layout
+  fi
+
+  echo "Syncing ${SOURCE_DIR} -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+  rsync "${RSYNC_OPTS[@]}" -e "ssh ${SSH_OPTS[*]}" \
+    "${SOURCE_DIR}/" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
 else
-  echo "Preparing remote runtime layout on ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-  prepare_remote_runtime_layout
+  echo "Syncing ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH} -> ${SOURCE_DIR}"
+  rsync "${RSYNC_OPTS[@]}" -e "ssh ${SSH_OPTS[*]}" \
+    "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/" "${SOURCE_DIR}/"
 fi
 
-echo "Syncing ${SOURCE_DIR} -> ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
-rsync "${RSYNC_OPTS[@]}" -e "ssh ${SSH_OPTS[*]}" \
-  "${SOURCE_DIR}/" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
-
-if [[ "${APPLY_PERMS}" == "1" && "${FULL_PERMS}" == "1" && "${DRY_RUN}" != "1" ]]; then
+if [[ "${SYNC_MODE}" == "push" && "${APPLY_PERMS}" == "1" && "${FULL_PERMS}" == "1" && "${DRY_RUN}" != "1" ]]; then
   echo "Running full ownership/permissions scan on remote (slow)"
   # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" \
@@ -382,11 +414,10 @@ chmod 775 \
 EOF
 fi
 
-if [[ "${RELOAD_OPCACHE}" == "1" && "${DRY_RUN}" != "1" ]]; then
-  echo "Reloading legacy PHP 7/Apache services to refresh OPCache"
+if [[ "${SYNC_MODE}" == "push" && "${RELOAD_OPCACHE}" == "1" && "${DRY_RUN}" != "1" ]]; then
+  echo "Reloading Apache service to refresh mod_php OPCache"
   ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" "bash -s" <<'EOF'
 set -euo pipefail
-reloaded=0
 
 reload_service() {
   local svc="$1"
@@ -405,15 +436,10 @@ reload_service() {
   return 1
 }
 
-for svc in php7.0-fpm php7.1-fpm php7.2-fpm php7.3-fpm php7.4-fpm php-fpm apache2 httpd; do
-  if reload_service "${svc}"; then
-    echo "Reloaded ${svc}"
-    reloaded=1
-  fi
-done
-
-if [[ "${reloaded}" != "1" ]]; then
-  echo "Warning: no known PHP 7/Apache service found to reload" >&2
+if reload_service "apache2"; then
+  echo "Reloaded apache2"
+else
+  echo "Warning: apache2 service was not found/reloaded" >&2
 fi
 EOF
 fi

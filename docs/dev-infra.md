@@ -16,7 +16,7 @@
 - `Dockerfile` — образ приложения (`apache` + PHP 7);
 - `prod.conf/` — конфиги Apache/MySQL/PHP;
 - `configs/crm/` — runtime-конфиги CRM, монтируемые в контейнер;
-- `scripts/deploy/push-crm.sh` — деплой на сервер через `rsync + ssh`;
+- `scripts/deploy/push-crm.sh` — синхронизация CRM (`local -> server` и `server -> local`) через `rsync + ssh`;
 - `Makefile` — единая точка входа для локальных команд.
 
 ## Runtime-конфиги CRM

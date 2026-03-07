@@ -11,7 +11,7 @@ SERVICE ?= $(APACHE_SERVICE)
 	up up-build rebuild down restart ps logs sh-apache compose-exec \
 	tracking vtiger-cron crm-init \
 	db-dump db-dump-pv db-import db-import-pv mysql-show-mode mysql-legacy-mode \
-	deploy deploy-dry deploy-full-perms
+	deploy deploy-dry deploy-full-perms deploy-reload deploy-pull deploy-pull-data deploy-pull-dry-run
 
 help:
 	@echo "Main (docker compose via make):"
@@ -43,6 +43,10 @@ help:
 	@echo "  make deploy"
 	@echo "  make deploy-dry"
 	@echo "  make deploy-full-perms"
+	@echo "  make deploy-reload   # deploy + apache2 reload (mod_php OPCache refresh)"
+	@echo "  make deploy-pull     # sync server -> local (code only, safe defaults)"
+	@echo "  make deploy-pull-data # sync server -> local including runtime data"
+	@echo "  make deploy-pull-dry-run # preview server -> local sync without writing"
 	@echo ""
 	@echo "Deploy variables:"
 	@echo "  HOST=<ip-or-host>  Override remote host from .env.deploy"
@@ -173,3 +177,15 @@ deploy-dry:
 
 deploy-full-perms:
 	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) --full-perms $(ARGS)
+
+deploy-reload:
+	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) --opcache-reload $(ARGS)
+
+deploy-pull:
+	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) --pull $(ARGS)
+
+deploy-pull-data:
+	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) --pull --with-runtime-data $(ARGS)
+
+deploy-pull-dry-run:
+	./scripts/deploy/push-crm.sh $(if $(HOST),--host $(HOST),) --pull --dry-run $(ARGS)

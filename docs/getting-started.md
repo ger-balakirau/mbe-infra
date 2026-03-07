@@ -159,14 +159,24 @@ make deploy-dry
 
 `make deploy-dry` не создает директории/файлы на сервере: только проверяет.
 
-```bash
-make deploy
-```
-
 Реальный деплой:
 
 ```bash
 make deploy
+```
+
+Если нужен принудительный сброс OPCache в `apache2` (`mod_php`):
+
+```bash
+make deploy-reload
+```
+
+Синхронизация данных/кода с сервера в локальную CRM-директорию:
+
+```bash
+make deploy-pull
+make deploy-pull-data
+make deploy-pull-dry-run
 ```
 
 ## 11) Если что-то не работает

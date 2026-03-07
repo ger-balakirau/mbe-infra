@@ -48,4 +48,8 @@ make deploy
 Опционально:
 
 - `make deploy-full-perms` — полный медленный прогон прав;
+- `make deploy-reload` — деплой + принудительный `apache2 reload` (для `mod_php` при необходимости);
+- `make deploy-pull` — синхронизация `server -> local` (без runtime-данных);
+- `make deploy-pull-data` — синхронизация `server -> local`, включая runtime-данные;
+- `make deploy-pull-dry-run` — preview `server -> local` без записи;
 - `ARGS="--with-config-inc" make deploy` — включить `config.inc.php` в синхронизацию.

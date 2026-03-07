@@ -60,17 +60,22 @@ cp .env.deploy.example .env.deploy
 | `make deploy` | Реальный деплой CRM на сервер |
 | `make deploy-dry` | Проверка деплоя без изменений |
 | `make deploy-full-perms` | Деплой + полный медленный `chmod/chown` прогон |
+| `make deploy-reload` | Деплой + явный `apache2 reload` после синхронизации |
+| `make deploy-pull` | Синхронизация `server -> local` (без runtime-данных) |
+| `make deploy-pull-data` | Синхронизация `server -> local`, включая runtime-данные |
+| `make deploy-pull-dry-run` | Preview `server -> local` без записи в локальные файлы |
 
 Что синхронизируется по умолчанию:
 
 - Синхронизируется код CRM.
-- Не синхронизируются локальные runtime/generated данные: `storage/`, `OperatorWayBill/`, `cache/`, `user_privileges/`, `kcfinder/upload/`, `cron/output.txt`.
+- Не синхронизируются runtime/generated данные: `storage/`, `OperatorWayBill/`, `cache/`, `user_privileges/`, `kcfinder/upload/`, `cron/output.txt` (включаются только флагом `--with-runtime-data`).
 - Не синхронизируются локальные секреты: `.mbe`, `config.csrf-secret.php`, `config_override.php`, `config.inc.php` (для `config.inc.php` нужен явный `--with-config-inc`).
+- `apache2 reload` по умолчанию выключен (включается только `--opcache-reload` или `make deploy-reload`).
 
 Поведение `--dry-run`:
 
-- В `--dry-run` скрипт ничего не создает на сервере.
-- `--dry-run` проверяет наличие обязательной runtime-структуры на сервере и завершится ошибкой, если чего-то не хватает.
+- В `--dry-run` скрипт ничего не записывает (ни на сервер, ни локально).
+- В push-режиме `--dry-run` проверяет наличие обязательной runtime-структуры на сервере и завершится ошибкой, если чего-то не хватает.
 - Для "пустого" сервера сначала выполните обычный `make deploy` (без `--dry-run`) для bootstrap директорий/файлов.
 
 Полезные варианты:
@@ -78,13 +83,19 @@ cp .env.deploy.example .env.deploy
 ```bash
 make deploy HOST=203.0.113.10
 ARGS="--with-config-inc" make deploy
+ARGS="--with-runtime-data" make deploy
+make deploy-reload HOST=203.0.113.10
+make deploy-pull HOST=203.0.113.10
+make deploy-pull-data HOST=203.0.113.10
+make deploy-pull-dry-run HOST=203.0.113.10
 ```
 
 Опасные флаги `scripts/deploy/push-crm.sh`:
 
-- `--delete` — удаляет на сервере файлы, которых нет локально.
+- `--delete` — удаляет в каталоге назначения файлы, которых нет в источнике синхронизации.
 - `--full-perms` — полный рекурсивный прогон прав (медленно).
 - `--source <path>` — при ошибке пути можно отправить на сервер не тот каталог.
+- `--with-runtime-data` — может перезаписать runtime-данные (`storage`, `cache`, uploads и т.д.).
 - `--with-config-inc` — включает синхронизацию `config.inc.php` (по умолчанию выключена).
 
 ## Variables
